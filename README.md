@@ -1,7 +1,9 @@
 # ETIM_to_CSV (BME-tool)
+
 ETIM_to_CSV (BME-tool) je nástroj v jazyce Python určený k extrakci dat z ETIM (ElectroTechnical Information Model) XML souborů a jejich převodu do formátu CSV.
 Tím usnadňuje analýzu a integraci ETIM dat do různých aplikací a pracovních postupů.
-Funkce
+
+Funkce:
 
     Parsování XML: Využívá xml_utils.py pro zpracování ETIM XML souborů.
     Extrakce dat: Používá bme_parser.py k získání relevantních dat z parsovaného XML.
