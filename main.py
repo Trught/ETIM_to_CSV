@@ -6,7 +6,6 @@ import logging
 
 # local imports
 import xml_utils
-#import bme_parser
 
 def handle_keyboard_interrupt(signum, frame):
     logging.info("Přijat Ctrl+C KeyboardInterrupt. Přerušuji.")
@@ -16,7 +15,7 @@ def setup_signal_handler():
     signal.signal(signal.SIGINT, handle_keyboard_interrupt)
 
 # Set up logging to both console and a file.
-def setup_logging(log_file='BME_parse.log', log_level=logging.INFO):
+def setup_logging(log_file='BME_parse.log', log_level=logging.DEBUG):
     # Create a logger
     logger = logging.getLogger()
     # Set the logging level
@@ -41,21 +40,28 @@ def print_help():
         <BMEcat_XML_soubor> : Cesta k BMEcat(ETIM) XML souboru.
     
     Pokud není zadán žádný argument nebo pokud zadaný argument není platný soubor XML, zobrazí se tato nápověda.
+    Zpracování lze přerušit zkratkou 'Ctrl + C'
     """
     print(help_message)
 
 # Main & arg check
 def main():
+    # Check if debug flag is present
+    debug_mode = "-debug" in sys.argv
+    # Remove debug argument if present
+    args = [arg for arg in sys.argv[1:] if arg != "-debug"]
+    
     # Check if a file argument is provided
-    if len(sys.argv) > 1:
-        droppedFile = sys.argv[1]
+    if len(args) > 0:
+        droppedFile = args[0]
         # Check if the provided file exists
         if os.path.exists(droppedFile):
             # Ensure the output directory exists
             os.makedirs('output', exist_ok=True)
             xml_file = droppedFile
             file_name = os.path.splitext(os.path.basename(xml_file))[0]
-            logger = setup_logging(log_file = "output/" + file_name + "_log.txt")
+            log_level = logging.DEBUG if debug_mode else logging.INFO
+            logger = setup_logging(log_file = "output/" + file_name + "_log.txt", log_level=log_level)
             
             # Process the XML file
             xml_utils.xml_parse(xml_file, logger)
@@ -68,7 +74,6 @@ def main():
         
     else:
         print_help()
-        logger.warning(f"Nebyl poskytnut žádný argument.")
 
 if __name__ == "__main__":
     setup_signal_handler()
