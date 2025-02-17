@@ -2,6 +2,7 @@ import os
 import xml.etree.ElementTree as ET
 import re
 import traceback
+import csv
 
 # local imports
 import bme_parser
@@ -25,17 +26,15 @@ def xml_parse(file_path, logger):
                 return
             #logger.info(f"Zpracovávání dat")
             bme_parser.parse_BME_header(ET_root, file_name, logger)
-            #bme_parser.parse_BME_products(ET_root, file_name, logger)
-            #bme_parser.parse_BME_mime(ET_root, file_name, logger)
-            #bme_parser.parse_BME_features(ET_root, file_name, logger)
+            bme_parser.parse_BME_products(ET_root, file_name, logger)
+
         except Exception as e:
             logger.error(f"Chyba funkce xml_parse: {e}")  
             logger.error(traceback.format_exc())
     else:
         logger.warning(f"Pokus jako obecný xml soubor")
         ET_root = get_xml_root(file_path, logger)
-        #raw_json = generic_xml_json(ET_root)
-        #save_products(raw_json, file_name)
+        generic_xml_json(ET_root, file_name, logger)
 
 # Check if the specified file has an XML prolog.
 def get_encoding_prolog(file_path, logger):
@@ -119,3 +118,35 @@ def get_xml_root(file_path, logger):
     except Exception as e:
         logger.error(f"Chyba funkce validate_xml: {e}")
         return None
+        
+
+def generic_xml_json(xml_root, output_csv, logger):
+    output_csv = "output/"+output_csv+".csv"
+    # Detect all product tags
+    product_tags = {"item", "SHOPITEM", "PRODUCT"}
+    products = []
+    
+    # Iterate over matching elements
+    for product in xml_root.findall(".//*"):
+        if product.tag in product_tags:
+            product_data = {}
+            for element in product:
+                product_data[element.tag] = element.text.strip() if element.text else ""
+            products.append(product_data)
+    
+    # Determine all possible column names
+    all_columns = set()
+    for product in products:
+        all_columns.update(product.keys())
+    all_columns = sorted(all_columns)  # Sort for consistency
+    
+    if products:
+        # Write to CSV
+        with open(output_csv, "w", newline="", encoding="utf-8") as csvfile:
+            writer = csv.DictWriter(csvfile, fieldnames=all_columns)
+            writer.writeheader()
+            writer.writerows(products)
+        logger.info(f"Uložen soubor: {output_csv}")
+    else:
+        logger.error(f"Žádná data k uložení: {output_csv}")
+        
