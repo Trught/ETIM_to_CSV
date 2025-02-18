@@ -34,7 +34,7 @@ def xml_parse(file_path, logger):
     else:
         logger.warning(f"Pokus jako obecný xml soubor")
         ET_root = get_xml_root(file_path, logger)
-        generic_xml_json(ET_root, file_name, logger)
+        save_generic_xml(ET_root, file_name, logger)
 
 # Check if the specified file has an XML prolog.
 def get_encoding_prolog(file_path, logger):
@@ -120,7 +120,7 @@ def get_xml_root(file_path, logger):
         return None
         
 
-def generic_xml_json(xml_root, output_csv, logger):
+def save_generic_xml(xml_root, output_csv, logger):
     output_csv = "output/"+output_csv+".csv"
     # Detect all product tags
     product_tags = {"item", "SHOPITEM", "PRODUCT"}
