@@ -117,17 +117,81 @@ def parse_BME_products(root, file_name, logger):
     save_to_csv(f"{file_name}_mime_products", all_mime_entries, logger)
     save_to_csv(f"{file_name}_keyword_products", all_keyword_entries, logger)
 
-# Parse MIME
+# Parse MIME    
 def parse_BME_mime(data, logger):
     mime_entries = []
-    
+    valid_mime_codes = {
+        "MD01": "Obrázek výrobku", #Product picture
+        "MD02": "Podobný obrázek", #Similar figure
+        "MD03": "Bezpečnostní list", #Safety data sheet
+        "MD04": "Stránka produktu Deeplink", #Deeplink product page
+        "MD05": "Deeplink REACH", #Deeplink REACH
+        "MD06": "Energetický štítek", #Energy label
+        "MD07": "Datový list výrobku pro energetický štítek", #Product data sheet for energy label
+        "MD08": "Kalibrační certifikát", #Calibration certificate
+        "MD09": "Certifikát", #Certificate
+        "MD10": "Schéma zapojení", #Circuit diagram
+        "MD11": "Regulace stavebních výrobků", #Construction Products Regulation
+        "MD12": "Rozměrový výkres", #Dimensioned drawing
+        "MD13": "Environmentální značka", #Environment label
+        "MD14": "Návod k použití", #Instructions for use
+        "MD15": "Diagram světelného kužele", #Light cone diagram
+        "MD16": "Křivka distribuce světla", #Light Distribution Curve
+        "MD17": "Logo 1c", #Logo 1c
+        "MD18": "Logo 4c", #Logo 4c
+        "MD19": "Luminaire data", #Luminaire data
+        "MD20": "Obrázek prostředí", #Ambient picture
+        "MD21": "Montážní pokyny", #Mounting instruction
+        "MD22": "Datový list výrobku", #Product data sheet
+        "MD23": "Obrázek produktu – zadní pohled", #Product picture back view
+        "MD24": "Obrázek produktu – pohled zespodu", #Product picture bottom view
+        "MD25": "Obrázek produktu – detailní pohled", #Product picture detailed view
+        "MD26": "Obrázek produktu – přední pohled", #Product picture front view
+        "MD27": "Obrázek produktu – šikmý pohled", #Product picture sloping
+        "MD28": "Obrázek produktu – pohled shora", #Product picture top view
+        "MD29": "Obrázek produktu – pohled z levé strany", #Product picture view from the left side
+        "MD30": "Obrázek produktu – pohled z pravé strany", #Product picture view from the right side
+        "MD31": "Osvědčení o schválení", #Seal of approval
+        "MD32": "Technická příručka", #Technical manual
+        "MD33": "Schválení testu", #Test approval
+        "MD34": "Schéma zapojení", #Wiring diagram
+        "MD35": "Prohlášení dodavatele o preferenčním původu produktu", #Supplier’s declaration for products having preferential origin status
+        "MD37": "3D / BIM objekt", #3D / BIM object
+        "MD38": "Dokumentace pro správu, provoz a údržbu", #Management, operation and maintenance document
+        "MD39": "Instruktážní video", #Instructional video
+        "MD40": "Seznam náhradních dílů", #Spare parts list
+        "MD41": "Prodejní brožura", #Sales brochure
+        "MD42": "AVCP Certifikát (Assessment and Verification of Constancy of Performance)", #AVCP certificate (Assessment and Verification of Constancy of Performance)
+        "MD43": "CLP (Classification, Labelling and Packaging)", #CLP (Classification, Labelling and Packaging)
+        "MD44": "ECOP (Environmental Code of Practice)", #ECOP (Environmental Code of Practice)
+        "MD45": "Produktové video", #Product video
+        "MD46": "360° pohled", #360° view
+        "MD47": "Náhled obrázku produktu (MD01)", #Thumbnail of Product picture (MD01)
+        "MD48": "Piktogram/Ikona", #Pictogram/Icon
+        "MD49": "Prohlášení RoHS", #Declaration RoHS
+        "MD50": "Prohlášení CoC (Certifikát shody, požadovaný pro CPR)", #Declaration CoC (Certificate of Conformity, requested for CPR)
+        "MD51": "Prohlášení DOP (Prohlášení o vlastnostech)", #Declaration DOP (Declaration of performance)
+        "MD52": "Prohlášení DOC CE (Prohlášení o shodě CE)", #Declaration DOC CE (Declaration of conformity CE)
+        "MD53": "Prohlášení BREEAM (Metoda environmentálního hodnocení budov BREEAM)", #Declaration BREEAM (Building Research Establishment Environmental Assessment Method)
+        "MD54": "Prohlášení EPD (Environmentální prohlášení o produktu)", #Declaration EPD (Environmental Product Declaration)
+        "MD55": "Prohlášení ETA (Evropské technické posouzení)", #Declaration ETA (European Technical Assessment)
+        "MD56": "Prohlášení o záruce (Záruční list)", #Declaration warranty (Warranty statement)
+        "MD57": "Aplikační video", #Application video
+        "MD58": "Otázky a odpovědi (Q&A video)", #Question and Answer (Q&A video)
+        "MD59": "Obrázek produktu ve čtvercovém formátu", #Product picture square format
+        "MD60": "Rozložený pohled (výkres)", #Exploded view drawing
+        "MD61": "Vývojový diagram", #Flowchart
+        "MD62": "Prezentace produktu", #Product presentation
+        "MD63": "Specification text", #Specification text
+        "MD64": "Line drawing", #Line drawing
+        "MD65": "Pohled na produktovou řadu", #Product family view
+        "MD99": "Ostatní" #Others
+    }
     user_defined_extensions = data.get("USER_DEFINED_EXTENSIONS", {})
     if user_defined_extensions:
         mime_info = user_defined_extensions.get("UDX.EDXF.MIME_INFO", {})
-        
         if mime_info:
             mime_data = mime_info.get("UDX.EDXF.MIME", [])
-            
             if isinstance(mime_data, dict):
                 mime_entries.append(mime_data)
             elif isinstance(mime_data, list):
@@ -142,10 +206,17 @@ def parse_BME_mime(data, logger):
             mime_entries.append(mime_data)
         elif isinstance(mime_data, list):
             mime_entries.extend(mime_data)
-
+    
     # Process MIME attributes
     for entry in mime_entries:
         if isinstance(entry, dict):
+            mime_code = entry.get("MIME_CODE") or entry.get("UDX.EDXF.MIME_CODE")
+            if mime_code:
+                if mime_code not in valid_mime_codes:
+                    logger.debug(f"Invalid MIME_CODE found: {mime_code}")
+                else:
+                    entry["MIME_CODE_NAME"] = valid_mime_codes[mime_code]
+            
             mime_source = entry.get("UDX.EDXF.MIME_SOURCE")
             if isinstance(mime_source, list) and len(mime_source) == 2 and mime_source[0] == mime_source[1]:
                 entry["UDX.EDXF.MIME_SOURCE"] = mime_source[0]
@@ -154,8 +225,9 @@ def parse_BME_mime(data, logger):
                 if isinstance(value, dict) and '@lang' in value:
                     entry[f"{key} @lang:{value['@lang']}"] = value['#text']
                     del entry[key]
-
+    
     return mime_entries
+
 
 # Parse Product Details
 def parse_BME_product(product_data, logger):
