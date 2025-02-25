@@ -1,6 +1,5 @@
 import os
 import csv
-import json
 import xml.etree.ElementTree as ET
 
 # Remove namespace from tag
@@ -72,19 +71,6 @@ def save_to_csv(file_name, data, logger):
         writer.writerows(data)
     
     logger.info(f"Uložen soubor: {csv_file}")
-
-# Generic json Writing Function
-def save_to_json(file_name, data, logger):
-    if not data:
-        logger.warning(f"Žádná data k uložení: {file_name}.json")
-        return
-    
-    os.makedirs("output", exist_ok=True)
-    json_filename = f'output/{file_name}.json'
-    with open(json_filename, "w", encoding="utf-8") as json_file:
-        json.dump(data, json_file, indent = 4)
-    json_file.close()
-    logger.info(f"Uložen soubor: {json_filename}")
 
 # Parse HEADER
 def parse_BME_header(root, file_name, logger):
