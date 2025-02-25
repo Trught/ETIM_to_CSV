@@ -112,11 +112,6 @@ def parse_BME_products(root, file_name, logger):
         # Parse Keywords
         keyword_entries = parse_BME_keyword(product_data, logger)
         all_keyword_entries.extend(keyword_entries)
-        
-        # Parse Product features
-        features_entries = parse_BME_features(product_data, logger)
-        #logger.debug(f"features_entries:{features_entries}")
-        all_features_entries.append(features_entries)
 
     save_to_csv(f"{file_name}_produkty", all_product_entries, logger)
     save_to_csv(f"{file_name}_soubory", all_mime_entries, logger)
