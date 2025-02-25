@@ -1,5 +1,6 @@
 import os
 import csv
+import json
 import xml.etree.ElementTree as ET
 
 # Remove namespace from tag
@@ -72,6 +73,19 @@ def save_to_csv(file_name, data, logger):
     
     logger.info(f"Uložen soubor: {csv_file}")
 
+# Generic json Writing Function
+def save_to_json(file_name, data, logger):
+    if not data:
+        logger.warning(f"Žádná data k uložení: {file_name}.json")
+        return
+    
+    os.makedirs("output", exist_ok=True)
+    json_filename = f'output/{file_name}.json'
+    with open(json_filename, "w", encoding="utf-8") as json_file:
+        json.dump(data, json_file, indent = 4)
+    json_file.close()
+    logger.info(f"Uložen soubor: {json_filename}")
+
 # Parse HEADER
 def parse_BME_header(root, file_name, logger):
     header = next(root.iterfind(".//HEADER"), None)
@@ -112,10 +126,16 @@ def parse_BME_products(root, file_name, logger):
         # Parse Keywords
         keyword_entries = parse_BME_keyword(product_data, logger)
         all_keyword_entries.extend(keyword_entries)
+        
+        # Parse Product features
+        features_entries = parse_BME_features(product_data, logger)
+        #logger.debug(f"features_entries:{features_entries}")
+        all_features_entries.append(features_entries)
 
-    save_to_csv(f"{file_name}_products", all_product_entries, logger)
-    save_to_csv(f"{file_name}_mime_products", all_mime_entries, logger)
-    save_to_csv(f"{file_name}_keyword_products", all_keyword_entries, logger)
+    save_to_csv(f"{file_name}_produkty", all_product_entries, logger)
+    save_to_csv(f"{file_name}_soubory", all_mime_entries, logger)
+    save_to_csv(f"{file_name}_klicova_slova", all_keyword_entries, logger)
+    
 
 # Parse MIME    
 def parse_BME_mime(data, logger):
@@ -231,13 +251,31 @@ def parse_BME_mime(data, logger):
 
 # Parse Product Details
 def parse_BME_product(product_data, logger):
+    # Sanitize new-line in value
+    def sanitize_value(value):
+        if isinstance(value, str):
+            return value.replace('\n', ' ').replace('\r', ' ').strip()
+        return value
+        
     product_entry  = {}
     product_details = product_data.get("PRODUCT_DETAILS", {})
+    product_logistic_details = product_data.get("PRODUCT_LOGISTIC_DETAILS", {})
+    
+    # Parse Product Logistic Details
+    if product_logistic_details:
+        custom_tariff_number = product_logistic_details.get("CUSTOMS_TARIFF_NUMBER", {})
+        country_of_origin = product_logistic_details.get("COUNTRY_OF_ORIGIN", {})
+        if custom_tariff_number:
+            custom_number = custom_tariff_number.get("CUSTOMS_NUMBER", {})
+            if custom_number:
+                product_entry["CUSTOMS_TARIFF_NUMBER"] = custom_number
+        if country_of_origin:
+            product_entry["COUNTRY_OF_ORIGIN"] = country_of_origin
     
     for tag, value in product_details.items():
         if isinstance(value, list):  # Convert lists to comma-separated strings
             value = ", ".join(map(str, value))
-        product_entry[tag] = value
+        product_entry[tag] = sanitize_value(value)
 
     return [product_entry]
 
