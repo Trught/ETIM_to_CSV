@@ -34,10 +34,10 @@ def setup_logging(log_file='BME_parse.log', log_level=logging.DEBUG):
 # Print help
 def print_help():
     help_message = """
-    Použití: python BME_parse.py <XML_soubor>
+    Použití: BME-too.exe <XML_soubor>
     
     Argumenty:
-        <BMEcat_XML_soubor> : Cesta k BMEcat(ETIM) XML souboru.
+        <XML_soubor> : Cesta k BMEcat(ETIM) XML souboru.
     
     Pokud není zadán žádný argument nebo pokud zadaný argument není platný soubor XML, zobrazí se tato nápověda.
     Zpracování lze přerušit zkratkou 'Ctrl + C'
@@ -74,6 +74,9 @@ def main():
         
     else:
         print_help()
+        print("Stiskněte libovolnou klávesu pro ukončení . . .")
+        os.system('pause >nul')
+        #input("Stiskněte libovolnou klávesu pro ukončení . . .")
 
 if __name__ == "__main__":
     setup_signal_handler()
