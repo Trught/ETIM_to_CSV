@@ -154,9 +154,11 @@ def parse_BME_mime(data, logger):
         "MD30": "Obrázek produktu – pohled z pravé strany", #Product picture view from the right side
         "MD31": "Osvědčení o schválení", #Seal of approval
         "MD32": "Technická příručka", #Technical manual
+        "MD32_DE": "Technická příručka_DE", #Technical manual
         "MD33": "Schválení testu", #Test approval
         "MD34": "Schéma zapojení", #Wiring diagram
         "MD35": "Prohlášení dodavatele o preferenčním původu produktu", #Supplier’s declaration for products having preferential origin status
+        "MD36": "Prohlášení", #Declaration, deleted in version 3.1 -> 4.0
         "MD37": "3D / BIM objekt", #3D / BIM object
         "MD38": "Dokumentace pro správu, provoz a údržbu", #Management, operation and maintenance document
         "MD39": "Instruktážní video", #Instructional video
@@ -199,7 +201,7 @@ def parse_BME_mime(data, logger):
                 mime_entries.extend(mime_data)
     
     # Extract from MIME_INFO (fallback)
-    logger.debug("Falling back to MIME_INFO in main structure.")
+    logger.debug("Hledám MIME_INFO v hlavní struktuře.")
     mime_info = data.get("MIME_INFO", {})
     if mime_info:
         mime_data = mime_info.get("MIME", [])    
@@ -212,9 +214,12 @@ def parse_BME_mime(data, logger):
     for entry in mime_entries:
         if isinstance(entry, dict):
             mime_code = entry.get("MIME_CODE") or entry.get("UDX.EDXF.MIME_CODE")
+            if not mime_code:
+                logger.debug(f"MIME_CODE nenalezem, hledám v MIME_DESCR ")
+                mime_code = entry.get("MIME_DESCR")
             if mime_code:
                 if mime_code not in valid_mime_codes:
-                    logger.debug(f"Invalid MIME_CODE found: {mime_code}")
+                    logger.debug(f"Neplatný MIME_CODE: {mime_code}")
                 else:
                     entry["MIME_CODE_NAME"] = valid_mime_codes[mime_code]
             
