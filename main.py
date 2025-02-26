@@ -34,7 +34,7 @@ def setup_logging(log_file='BME_parse.log', log_level=logging.DEBUG):
 # Print help
 def print_help():
     help_message = """
-    Použití: BME-too.exe <XML_soubor>
+    Použití: BME-tool.exe <XML_soubor>
     
     Argumenty:
         <XML_soubor> : Cesta k BMEcat(ETIM) XML souboru.
