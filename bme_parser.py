@@ -85,7 +85,7 @@ def parse_BME_header(root, file_name, logger):
     logger.info(f"Výchozí jazyk: {lang_def}")
     logger.debug("Header data: %s", parsed_header)
     flat_header = flatten_dict(parsed_header)
-    save_to_csv(f"{file_name}_head", [flat_header], logger)
+    save_to_csv(f"{file_name}_hlavicka", [flat_header], logger)
 
 # Parse Products
 def parse_BME_products(root, file_name, logger):
@@ -96,7 +96,29 @@ def parse_BME_products(root, file_name, logger):
     for product in root.iterfind(".//PRODUCT"):
         product_data = parse_element(product, logger)
         supplier_pid = next((product_data[key] for key in product_data if key.startswith("SUPPLIER_PID")), "N/A")
+        product_details = product_data.get("PRODUCT_DETAILS", {})
         logger.debug(f"Zpracovávám produkt:{supplier_pid}")
+        #logger.debug(f"keys: {product_details.keys()}")
+        
+        # EAN parse
+        if product_details.get("EAN"):
+            inter_pid_ean = product_details.get("EAN", [])
+            logger.debug(f"EAN: {inter_pid_ean}")
+        elif product_details.get("INTERNATIONAL_PID @type:EAN"):
+            inter_pid_ean = product_details.get("INTERNATIONAL_PID @type:EAN", [])
+            logger.debug(f"EAN: {inter_pid_ean}")
+        elif product_details.get("INTERNATIONAL_PID @type:ean"):
+            inter_pid_ean = product_details.get("INTERNATIONAL_PID @type:ean", [])
+            logger.debug(f"EAN: {inter_pid_ean}")
+        elif product_details.get("INTERNATIONAL_PID @type:GTIN"):
+            inter_pid_ean = product_details.get("INTERNATIONAL_PID @type:GTIN", [])
+            logger.debug(f"EAN: {inter_pid_ean}")
+        elif product_details.get("INTERNATIONAL_PID @type:gtin"):
+            inter_pid_ean = product_details.get("INTERNATIONAL_PID @type:gtin", [])
+            logger.debug(f"EAN: {inter_pid_ean}")
+        else:
+            inter_pid_ean = None
+            
         # Parse product details
         product_entries = parse_BME_product(product_data, logger)
         for entry in product_entries:
@@ -107,6 +129,7 @@ def parse_BME_products(root, file_name, logger):
         mime_data = parse_BME_mime(product_data, logger)
         for entry in mime_data:
             entry["SUPPLIER_PID"] = supplier_pid
+            entry["EAN"] = inter_pid_ean
             all_mime_entries.append(entry)
 
         # Parse Keywords
