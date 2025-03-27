@@ -98,27 +98,17 @@ def parse_BME_products(root, file_name, logger):
         supplier_pid = next((product_data[key] for key in product_data if key.startswith("SUPPLIER_PID")), "N/A")
         product_details = product_data.get("PRODUCT_DETAILS", {})
         logger.debug(f"Zpracovávám produkt:{supplier_pid}")
-        #logger.debug(f"keys: {product_details.keys()}")
+        
         
         # EAN parse
-        if product_details.get("EAN"):
-            inter_pid_ean = product_details.get("EAN", [])
-            logger.debug(f"EAN: {inter_pid_ean}")
-        elif product_details.get("INTERNATIONAL_PID @type:EAN"):
-            inter_pid_ean = product_details.get("INTERNATIONAL_PID @type:EAN", [])
-            logger.debug(f"EAN: {inter_pid_ean}")
-        elif product_details.get("INTERNATIONAL_PID @type:ean"):
-            inter_pid_ean = product_details.get("INTERNATIONAL_PID @type:ean", [])
-            logger.debug(f"EAN: {inter_pid_ean}")
-        elif product_details.get("INTERNATIONAL_PID @type:GTIN"):
-            inter_pid_ean = product_details.get("INTERNATIONAL_PID @type:GTIN", [])
-            logger.debug(f"EAN: {inter_pid_ean}")
-        elif product_details.get("INTERNATIONAL_PID @type:gtin"):
-            inter_pid_ean = product_details.get("INTERNATIONAL_PID @type:gtin", [])
-            logger.debug(f"EAN: {inter_pid_ean}")
-        else:
-            inter_pid_ean = None
-            
+        # Normalize keys for case-insensitive matching
+        product_details_lower = {key.lower(): value for key, value in product_details.items()}
+        ean_keys = ["ean", "international_pid @type:ean", "international_pid @type:gtin"]
+        inter_pid_ean = next((product_details_lower[key] for key in ean_keys if key in product_details_lower), None)
+        logger.debug(f"EAN: {inter_pid_ean}")
+        if not inter_pid_ean:
+            logger.warning(f"EAN nenalezen u produktu {supplier_pid}")
+        
         # Parse product details
         product_entries = parse_BME_product(product_data, logger)
         for entry in product_entries:
@@ -139,7 +129,6 @@ def parse_BME_products(root, file_name, logger):
     save_to_csv(f"{file_name}_produkty", all_product_entries, logger)
     save_to_csv(f"{file_name}_soubory", all_mime_entries, logger)
     save_to_csv(f"{file_name}_klicova_slova", all_keyword_entries, logger)
-    
 
 # Parse MIME    
 def parse_BME_mime(data, logger):
