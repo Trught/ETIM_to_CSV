@@ -123,7 +123,7 @@ def get_xml_root(file_path, logger):
 def save_generic_xml(xml_root, output_csv, logger):
     output_csv = "output/"+output_csv+".csv"
     # Detect all product tags
-    product_tags = {"item", "SHOPITEM", "PRODUCT"}
+    product_tags = {"item", "ITEM", "SHOPITEM", "PRODUCT"}
     products = []
     
     # Iterate over matching elements
