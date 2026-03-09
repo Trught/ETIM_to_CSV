@@ -93,7 +93,7 @@ def main():
     file_name = os.path.splitext(os.path.basename(dropped_file))[0]
     log_file = os.path.join("output", f"{file_name}_log.txt")
     log_level = logging.DEBUG if debug_mode else logging.INFO
-    logger = setup_logging(log_file=log_file, log_level=logging.INFO)
+    logger = setup_logging(log_file=log_file, log_level=log_level)
     
     try:
         logger.info("Spouštím zpracování souboru: %s", dropped_file)
@@ -118,4 +118,5 @@ def main():
 
 if __name__ == "__main__":
     setup_signal_handler()
+
     sys.exit(main())
