@@ -4,6 +4,7 @@ import json
 import os
 import uuid
 import xml.etree.ElementTree as ET
+from urllib.parse import quote, unquote
 
 
 # Slovník MIME kódů 
@@ -76,6 +77,25 @@ _VALID_MIME_CODES = {
     "MD99": "Ostatní",  # Others
 }
 
+# Limit repetitive debug spam for frequently occurring parser situations.
+_DEBUG_EVENT_COUNTS = {}
+_DEBUG_EVENT_LIMIT = 10
+
+
+def _debug_limited(logger, event_key, message):
+    count = _DEBUG_EVENT_COUNTS.get(event_key, 0)
+    if count < _DEBUG_EVENT_LIMIT:
+        logger.debug(message)
+        count += 1
+        _DEBUG_EVENT_COUNTS[event_key] = count
+        if count == _DEBUG_EVENT_LIMIT:
+            logger.debug(
+                "Další opakování zprávy '%s' bude potlačeno.",
+                event_key,
+            )
+    else:
+        _DEBUG_EVENT_COUNTS[event_key] = count + 1
+
 # Remove namespace from tag
 def clean_tag(tag):
     return tag.split("}", 1)[-1] if isinstance(tag, str) else tag
@@ -86,7 +106,8 @@ def create_key(tag, attributes):
     if not attributes:
         return tag
 
-    attr_parts = [f"@{key}:{value}" for key, value in sorted(attributes.items())]
+    # Escape attribute values so split_key() can round-trip even with spaces/colons.
+    attr_parts = [f"@{quote(str(key), safe='')}:{quote(str(value), safe='')}" for key, value in sorted(attributes.items())]
     return f"{tag} {' '.join(attr_parts)}"
 
 
@@ -136,6 +157,7 @@ class DynamicCsvBuffer:
         self.logger = logger
         self.priority_fields = tuple(priority_fields)
         self.fieldnames = set()
+        self._seen_fieldnames = set()
         self.row_count = 0
 
         os.makedirs("output", exist_ok=True)
@@ -148,6 +170,15 @@ class DynamicCsvBuffer:
         if not row:
             return
         normalized_row = {str(key): value for key, value in row.items()}
+        new_fields = sorted(field for field in normalized_row.keys() if field not in self._seen_fieldnames)
+        if new_fields:
+            self.logger.debug(
+                "Nové sloupce ve %s na řádku %s: %s",
+                self.file_name,
+                self.row_count + 1,
+                ", ".join(new_fields),
+            )
+            self._seen_fieldnames.update(new_fields)
         self.fieldnames.update(normalized_row.keys())
         json.dump(normalized_row, self._handle, ensure_ascii=False, default=str)
         self._handle.write("\n")
@@ -336,6 +367,9 @@ def parse_BME_product_bundle_from_data(product_data, product_tag, logger):
         if "ARTICLE_FEATURES" in product_data:
             product_data["PRODUCT_FEATURES"] = product_data["ARTICLE_FEATURES"]
 
+        if "ARTICLE_LOGISTIC_DETAILS" in product_data:
+            product_data["PRODUCT_LOGISTIC_DETAILS"] = product_data["ARTICLE_LOGISTIC_DETAILS"]
+
     supplier_pid = next((product_data[key] for key in product_data if key.startswith("SUPPLIER_PID")), "N/A")
     product_details = product_data.get("PRODUCT_DETAILS", {})
     if not isinstance(product_details, dict):
@@ -352,7 +386,7 @@ def parse_BME_product_bundle_from_data(product_data, product_tag, logger):
     inter_pid_ean = next((product_details_lower[key] for key in ean_keys if key in product_details_lower), None)
     logger.debug(f"EAN: {inter_pid_ean}")
     if not inter_pid_ean:
-        logger.warning(f"EAN nenalezen u produktu {supplier_pid}")
+        logger.debug(f"EAN nenalezen u produktu {supplier_pid}")
 
     # Parse product details
     for entry in parse_BME_product(product_data, logger):
@@ -408,16 +442,16 @@ def parse_BME_product_bundle_from_data(product_data, product_tag, logger):
 
 # Parse MIME
 def parse_BME_mime(data, logger):
-    mime_entries = []
+    raw_mime_entries = []
     user_defined_extensions = data.get("USER_DEFINED_EXTENSIONS", {})
     if user_defined_extensions:
         mime_info = user_defined_extensions.get("UDX.EDXF.MIME_INFO", {})
         if mime_info:
             mime_data = mime_info.get("UDX.EDXF.MIME", [])
             if isinstance(mime_data, dict):
-                mime_entries.append(mime_data)
+                raw_mime_entries.append(mime_data)
             elif isinstance(mime_data, list):
-                mime_entries.extend(mime_data)
+                raw_mime_entries.extend(mime_data)
 
     # Extract from MIME_INFO (fallback)
     logger.debug("Hledám MIME_INFO v hlavní struktuře.")
@@ -425,16 +459,18 @@ def parse_BME_mime(data, logger):
     if mime_info:
         mime_data = mime_info.get("MIME", [])
         if isinstance(mime_data, dict):
-            mime_entries.append(mime_data)
+            raw_mime_entries.append(mime_data)
         elif isinstance(mime_data, list):
-            mime_entries.extend(mime_data)
+            raw_mime_entries.extend(mime_data)
 
     # Process MIME attributes
-    for entry in mime_entries:
-        if isinstance(entry, dict):
+    mime_entries = []
+    for raw_entry in raw_mime_entries:
+        if isinstance(raw_entry, dict):
+            entry = dict(raw_entry)
             mime_code = entry.get("MIME_CODE") or entry.get("UDX.EDXF.MIME_CODE")
             if not mime_code:
-                logger.debug(f"MIME_CODE nenalezen, hledám v MIME_DESCR ")
+                _debug_limited(logger, "mime_code_missing", "MIME_CODE nenalezen, hledám v MIME_DESCR")
                 mime_code = entry.get("MIME_DESCR")
             
             if mime_code:
@@ -442,7 +478,7 @@ def parse_BME_mime(data, logger):
                 if mime_code_name:
                     entry["MIME_CODE_NAME"] = mime_code_name
                 else:
-                    logger.debug("Neplatný MIME_CODE: %s", mime_code)
+                    _debug_limited(logger, f"invalid_mime_code:{mime_code}", f"Neplatný MIME_CODE: {mime_code}")
 
             mime_source = entry.get("UDX.EDXF.MIME_SOURCE")
             if isinstance(mime_source, list) and len(mime_source) == 2 and mime_source[0] == mime_source[1]:
@@ -452,6 +488,7 @@ def parse_BME_mime(data, logger):
                 if isinstance(value, dict) and '@lang' in value:
                     entry[f"{key} @lang:{value['@lang']}"] = value['#text']
                     del entry[key]
+            mime_entries.append(entry)
 
     return mime_entries
 
@@ -513,79 +550,90 @@ def parse_BME_keyword(product_data, logger):
 
 # FEATURES
 def parse_BME_features(product_data, logger):
-    features_block = product_data.get("PRODUCT_FEATURES", {})
-    if not isinstance(features_block, dict) or not features_block:
-        return []
-    # FEATURE-Container kann auch "FEATURE @...:..." heißen -> iterieren
-    feature_nodes = []
-    for k, v in features_block.items():
-        tag, _ = split_key(k)
-        if tag == "FEATURE":
-            feature_nodes = v
-            break
+    feature_blocks = []
+    for key, value in product_data.items():
+        tag, _ = split_key(key)
+        if tag != "PRODUCT_FEATURES":
+            continue
+        if isinstance(value, dict):
+            feature_blocks.append(value)
+        elif isinstance(value, list):
+            feature_blocks.extend(item for item in value if isinstance(item, dict))
 
-    if not feature_nodes:
+    if not feature_blocks:
         return []
-
-    if isinstance(feature_nodes, dict):
-        feature_nodes = [feature_nodes]
-    elif not isinstance(feature_nodes, list):
-        return []
-
-    # optionale Meta-Daten auf Block-Level
-    ref_system_name, _ = get_first_value(features_block, "REFERENCE_FEATURE_SYSTEM_NAME")
-    ref_group_id, _ = get_first_value(features_block, "REFERENCE_FEATURE_GROUP_ID")
 
     out = []
+    for features_block in feature_blocks:
+        feature_nodes = []
+        for k, v in features_block.items():
+            tag, _ = split_key(k)
+            if tag != "FEATURE":
+                continue
+            if isinstance(v, dict):
+                feature_nodes.append(v)
+            elif isinstance(v, list):
+                feature_nodes.extend(item for item in v if isinstance(item, dict))
 
-    for f in feature_nodes:
-        if not isinstance(f, dict):
+        if not feature_nodes:
             continue
 
-        # FNAME (Feature-Name)
-        fname_candidates = iter_tag_values(f, "FNAME")
-        if fname_candidates:
-            fname_val, fname_attrs = fname_candidates[0]
-            fname = sanitize_value(fname_val)
-            fname_lang = fname_attrs.get("lang") or fname_attrs.get("xml:lang")
-        else:
-            fname, fname_lang = None, None
+        # optional meta-data on block-level
+        ref_system_name, _ = get_first_value(features_block, "REFERENCE_FEATURE_SYSTEM_NAME")
+        ref_group_id, _ = get_first_value(features_block, "REFERENCE_FEATURE_GROUP_ID")
 
-        # optional
-        funit_val, _ = get_first_value(f, "FUNIT")
-        forder_val, _ = get_first_value(f, "FORDER")
+        for f in feature_nodes:
+            if not isinstance(f, dict):
+                continue
 
-        funit = sanitize_value(funit_val)
-        forder = sanitize_value(forder_val)
+            # FNAME (Feature name)
+            fname_candidates = iter_tag_values(f, "FNAME")
+            if fname_candidates:
+                fname_val, fname_attrs = fname_candidates[0]
+                fname = sanitize_value(fname_val)
+                fname_lang = fname_attrs.get("lang") or fname_attrs.get("xml:lang")
+            else:
+                fname, fname_lang = None, None
 
-        # FVALUE: kann mehrfach vorkommen a má často @lang
-        fvalue_items = iter_tag_values(f, "FVALUE")
+            # optional
+            funit_val, _ = get_first_value(f, "FUNIT")
+            forder_val, _ = get_first_value(f, "FORDER")
+            fvalue_details_val, _ = get_first_value(f, "FVALUE_DETAILS")
 
-        if not fvalue_items:
-            out.append({
-                "REFERENCE_FEATURE_SYSTEM_NAME": sanitize_value(ref_system_name),
-                "REFERENCE_FEATURE_GROUP_ID": sanitize_value(ref_group_id),
-                "FNAME": fname,
-                "FNAME_LANG": fname_lang,
-                "FVALUE": None,
-                "FVALUE_LANG": None,
-                "FUNIT": funit,
-                "FORDER": forder
-            })
-            continue
+            funit = sanitize_value(funit_val)
+            forder = sanitize_value(forder_val)
+            fvalue_details = sanitize_value(fvalue_details_val)
 
-        for fval, fattrs in fvalue_items:
-            fvalue_lang = fattrs.get("lang") or fattrs.get("xml:lang")
-            out.append({
-                "REFERENCE_FEATURE_SYSTEM_NAME": sanitize_value(ref_system_name),
-                "REFERENCE_FEATURE_GROUP_ID": sanitize_value(ref_group_id),
-                "FNAME": fname,
-                "FNAME_LANG": fname_lang,
-                "FVALUE": sanitize_value(fval),
-                "FVALUE_LANG": fvalue_lang,
-                "FUNIT": funit,
-                "FORDER": forder
-            })
+            # FVALUE can occur multiple times and often carries @lang.
+            fvalue_items = iter_tag_values(f, "FVALUE")
+
+            if not fvalue_items:
+                out.append({
+                    "REFERENCE_FEATURE_SYSTEM_NAME": sanitize_value(ref_system_name),
+                    "REFERENCE_FEATURE_GROUP_ID": sanitize_value(ref_group_id),
+                    "FNAME": fname,
+                    "FNAME_LANG": fname_lang,
+                    "FVALUE": None,
+                    "FVALUE_LANG": None,
+                    "FVALUE_DETAILS": fvalue_details,
+                    "FUNIT": funit,
+                    "FORDER": forder
+                })
+                continue
+
+            for fval, fattrs in fvalue_items:
+                fvalue_lang = fattrs.get("lang") or fattrs.get("xml:lang")
+                out.append({
+                    "REFERENCE_FEATURE_SYSTEM_NAME": sanitize_value(ref_system_name),
+                    "REFERENCE_FEATURE_GROUP_ID": sanitize_value(ref_group_id),
+                    "FNAME": fname,
+                    "FNAME_LANG": fname_lang,
+                    "FVALUE": sanitize_value(fval),
+                    "FVALUE_LANG": fvalue_lang,
+                    "FVALUE_DETAILS": fvalue_details,
+                    "FUNIT": funit,
+                    "FORDER": forder
+                })
     return out
 
 
@@ -597,7 +645,7 @@ def split_key(k: str):
     for p in parts[1:]:
         if p.startswith("@") and ":" in p[1:]:
             a, v = p[1:].split(":", 1)
-            attrs[a] = v
+            attrs[unquote(a)] = unquote(v)
     return tag, attrs
 
 
